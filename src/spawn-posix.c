@@ -154,7 +154,7 @@ get_max_fds (void)
  * which shall not be closed.  This list shall be sorted in ascending
  * order with the end marked by -1.  */
 void
-_gpgrt_close_all_fds (int first, int *except)
+_gpgrt_close_all_fds (int first, const int *except)
 {
   int max_fd = get_max_fds ();
   int fd, i, except_start;
@@ -217,7 +217,7 @@ do_create_pipe_and_estream (int filedes[2], estream_t *r_fp,
   if (pipe (filedes) == -1)
     {
       err = _gpg_err_code_from_syserror ();
-      _gpgrt_log_error (_("error creating a pipe: %s\n"), _gpg_strerror (err));
+      _gpgrt_log_info (_("error creating a pipe: %s\n"), _gpg_strerror (err));
       filedes[0] = filedes[1] = -1;
       *r_fp = NULL;
       return err;
@@ -231,7 +231,7 @@ do_create_pipe_and_estream (int filedes[2], estream_t *r_fp,
   if (!*r_fp)
     {
       err = _gpg_err_code_from_syserror ();
-      _gpgrt_log_error (_("error creating a stream for a pipe: %s\n"),
+      _gpgrt_log_info (_("error creating a stream for a pipe: %s\n"),
                         _gpg_strerror (err));
       close (filedes[0]);
       close (filedes[1]);
@@ -287,32 +287,46 @@ posix_open_null (int for_write)
   return fd;
 }
 
+struct gpgrt_spawn_actions {
+  int fd[3];
+  const int *except_fds;
+  char **environ;
+  void (*atfork) (void *);
+  void *atfork_arg;
+};
+
 static void
-my_exec (const char *pgmname, const char *argv[], struct spawn_cb_arg *sca)
+my_exec (const char *pgmname, const char *argv[], gpgrt_spawn_actions_t act)
 {
   int i;
 
   /* Assign /dev/null to unused FDs.  */
   for (i = 0; i <= 2; i++)
-    if (sca->fds[i] == -1)
-      sca->fds[i] = posix_open_null (i);
+    if (act->fd[i] == -1)
+      act->fd[i] = posix_open_null (i);
 
   /* Connect the standard files.  */
   for (i = 0; i <= 2; i++)
-    if (sca->fds[i] != i)
+    if (act->fd[i] != i)
       {
-        if (dup2 (sca->fds[i], i) == -1)
+        if (dup2 (act->fd[i], i) == -1)
           _gpgrt_log_fatal ("dup2 std%s failed: %s\n",
                             i==0?"in":i==1?"out":"err", strerror (errno));
         /*
-         * We don't close sca.fds[i] here, but close them by
+         * We don't close act->fd[i] here, but close them by
          * close_all_fds.  Note that there may be same one in three of
-         * sca->fds[i].
+         * act->fd[i].
          */
       }
 
   /* Close all other files.  */
-  _gpgrt_close_all_fds (3, sca->except_fds);
+  _gpgrt_close_all_fds (3, act->except_fds);
+
+  if (act->environ)
+    environ = act->environ;
+
+  if (act->atfork)
+    act->atfork (act->atfork_arg);
 
   execv (pgmname, (char *const *)argv);
   /* No way to print anything, as we have may have closed all streams. */
@@ -320,24 +334,9 @@ my_exec (const char *pgmname, const char *argv[], struct spawn_cb_arg *sca)
 }
 
 
-static void
-call_spawn_cb (struct spawn_cb_arg *sca,
-               int fd_in, int fd_out, int fd_err,
-               void (*spawn_cb) (struct spawn_cb_arg *), void *spawn_cb_arg)
-{
-  sca->fds[0] = fd_in;
-  sca->fds[1] = fd_out;
-  sca->fds[2] = fd_err;
-  sca->except_fds = NULL;
-  sca->arg = spawn_cb_arg;
-  if (spawn_cb)
-    (*spawn_cb) (sca);
-}
-
-
 static gpg_err_code_t
 spawn_detached (const char *pgmname, const char *argv[],
-                void (*spawn_cb) (struct spawn_cb_arg *), void *spawn_cb_arg)
+                gpgrt_spawn_actions_t act)
 {
   gpg_err_code_t ec;
   pid_t pid;
@@ -362,7 +361,7 @@ spawn_detached (const char *pgmname, const char *argv[],
   if (pid == (pid_t)(-1))
     {
       ec = _gpg_err_code_from_syserror ();
-      _gpgrt_log_error (_("error forking process: %s\n"), _gpg_strerror (ec));
+      _gpgrt_log_info (_("error forking process: %s\n"), _gpg_strerror (ec));
       xfree (argv);
       return ec;
     }
@@ -370,7 +369,6 @@ spawn_detached (const char *pgmname, const char *argv[],
   if (!pid)
     {
       pid_t pid2;
-      struct spawn_cb_arg sca;
 
       if (setsid() == -1 || chdir ("/"))
         _exit (1);
@@ -381,9 +379,7 @@ spawn_detached (const char *pgmname, const char *argv[],
       if (pid2)
         _exit (0);  /* Let the parent exit immediately. */
 
-      call_spawn_cb (&sca, -1, -1, -1, spawn_cb, spawn_cb_arg);
-
-      my_exec (pgmname, argv, &sca);
+      my_exec (pgmname, argv, act);
       /*NOTREACHED*/
     }
 
@@ -392,7 +388,7 @@ spawn_detached (const char *pgmname, const char *argv[],
     {
       _gpgrt_post_syscall ();
       ec = _gpg_err_code_from_syserror ();
-      _gpgrt_log_error ("waitpid failed in gpgrt_spawn_process_detached: %s",
+      _gpgrt_log_info ("waitpid failed in gpgrt_spawn_process_detached: %s",
                         _gpg_strerror (ec));
       return ec;
     }
@@ -402,11 +398,63 @@ spawn_detached (const char *pgmname, const char *argv[],
   return 0;
 }
 
-void
-_gpgrt_spawn_helper (struct spawn_cb_arg *sca)
+gpg_err_code_t
+_gpgrt_spawn_actions_new (gpgrt_spawn_actions_t *r_act)
 {
-  int *user_except = sca->arg;
-  sca->except_fds = user_except;
+  gpgrt_spawn_actions_t act;
+  int i;
+
+  *r_act = NULL;
+
+  act = xtrycalloc (1, sizeof (struct gpgrt_spawn_actions));
+  if (act == NULL)
+    return _gpg_err_code_from_syserror ();
+
+  for (i = 0; i <= 2; i++)
+    act->fd[i] = -1;
+
+  *r_act = act;
+  return 0;
+}
+
+void
+_gpgrt_spawn_actions_release (gpgrt_spawn_actions_t act)
+{
+  if (!act)
+    return;
+
+  xfree (act);
+}
+
+void
+_gpgrt_spawn_actions_set_environ (gpgrt_spawn_actions_t act,
+                                  char **environ_for_child)
+{
+  act->environ = environ_for_child;
+}
+
+void
+_gpgrt_spawn_actions_set_atfork (gpgrt_spawn_actions_t act,
+                                 void (*atfork)(void *), void *arg)
+{
+  act->atfork = atfork;
+  act->atfork_arg = arg;
+}
+
+void
+_gpgrt_spawn_actions_set_redirect (gpgrt_spawn_actions_t act,
+                                   int in, int out, int err)
+{
+  act->fd[0] = in;
+  act->fd[1] = out;
+  act->fd[2] = err;
+}
+
+void
+_gpgrt_spawn_actions_set_inherit_fds (gpgrt_spawn_actions_t act,
+                                      const int *fds)
+{
+  act->except_fds = fds;
 }
 
 struct gpgrt_process {
@@ -422,9 +470,7 @@ struct gpgrt_process {
 
 gpg_err_code_t
 _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
-                      unsigned int flags,
-                      void (*spawn_cb) (struct spawn_cb_arg *),
-                      void *spawn_cb_arg,
+                      unsigned int flags, gpgrt_spawn_actions_t act,
                       gpgrt_process_t *r_process)
 {
   gpg_err_code_t ec;
@@ -435,6 +481,15 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
   pid_t pid;
   const char **argv;
   int i, j;
+  struct gpgrt_spawn_actions act_default;
+
+  if (!act)
+    {
+      memset (&act_default, 0, sizeof (act_default));
+      for (i = 0; i <= 2; i++)
+        act_default.fd[i] = -1;
+      act = &act_default;
+    }
 
   if (r_process)
     *r_process = NULL;
@@ -472,7 +527,7 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
           return GPG_ERR_INV_ARG;
         }
 
-      return spawn_detached (pgmname, argv, spawn_cb, spawn_cb_arg);
+      return spawn_detached (pgmname, argv, act);
     }
 
   process = xtrycalloc (1, sizeof (struct gpgrt_process));
@@ -581,7 +636,7 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
   if (pid == (pid_t)(-1))
     {
       ec = _gpg_err_code_from_syserror ();
-      _gpgrt_log_error (_("error forking process: %s\n"), _gpg_strerror (ec));
+      _gpgrt_log_info (_("error forking process: %s\n"), _gpg_strerror (ec));
       if (fd_in[0] >= 0 && fd_in[0] != 0)
         close (fd_in[0]);
       if (fd_in[1] >= 0)
@@ -601,8 +656,6 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
 
   if (!pid)
     {
-      struct spawn_cb_arg sca;
-
       if (fd_in[1] >= 0)
         close (fd_in[1]);
       if (fd_out[0] >= 0)
@@ -610,11 +663,15 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
       if (fd_err[0] >= 0)
         close (fd_err[0]);
 
-      call_spawn_cb (&sca, fd_in[0], fd_out[1], fd_err[1],
-                     spawn_cb, spawn_cb_arg);
+      if (act->fd[0] < 0)
+        act->fd[0] = fd_in[0];
+      if (act->fd[1] < 0)
+        act->fd[1] = fd_out[1];
+      if (act->fd[2] < 0)
+        act->fd[2] = fd_err[1];
 
       /* Run child. */
-      my_exec (pgmname, argv, &sca);
+      my_exec (pgmname, argv, act);
       /*NOTREACHED*/
     }
 
@@ -712,8 +769,9 @@ _gpgrt_process_get_streams (gpgrt_process_t process, unsigned int flags,
   return 0;
 }
 
-static gpg_err_code_t
-process_vctl (gpgrt_process_t process, unsigned int request, va_list arg_ptr)
+gpg_err_code_t
+_gpgrt_process_vctl (gpgrt_process_t process, unsigned int request,
+                     va_list arg_ptr)
 {
   switch (request)
     {
@@ -813,18 +871,6 @@ process_vctl (gpgrt_process_t process, unsigned int request, va_list arg_ptr)
 }
 
 gpg_err_code_t
-_gpgrt_process_ctl (gpgrt_process_t process, unsigned int request, ...)
-{
-  va_list arg_ptr;
-  gpg_err_code_t ec;
-
-  va_start (arg_ptr, request);
-  ec = process_vctl (process, request, arg_ptr);
-  va_end (arg_ptr);
-  return ec;
-}
-
-gpg_err_code_t
 _gpgrt_process_wait (gpgrt_process_t process, int hang)
 {
   gpg_err_code_t ec;
@@ -843,7 +889,7 @@ _gpgrt_process_wait (gpgrt_process_t process, int hang)
   if (pid == (pid_t)(-1))
     {
       ec = _gpg_err_code_from_syserror ();
-      _gpgrt_log_error (_("waiting for process %d to terminate failed: %s\n"),
+      _gpgrt_log_info (_("waiting for process %d to terminate failed: %s\n"),
                         (int)pid, _gpg_strerror (ec));
     }
   else if (!pid)
@@ -866,7 +912,7 @@ _gpgrt_process_release (gpgrt_process_t process)
   if (!process)
     return;
 
-  if (process->terminated)
+  if (!process->terminated)
     {
       _gpgrt_process_terminate (process);
       _gpgrt_process_wait (process, 1);
