@@ -886,14 +886,14 @@ gpgrt_b64dec_start (const char *title)
   return _gpgrt_b64dec_start (title);
 }
 
-gpg_error_t
+gpg_err_code_t
 gpgrt_b64dec_proc (gpgrt_b64state_t state, void *buffer,
                    size_t length, size_t *r_nbytes)
 {
   return _gpgrt_b64dec_proc (state, buffer, length, r_nbytes);
 }
 
-gpg_error_t
+gpg_err_code_t
 gpgrt_b64dec_finish (gpgrt_b64state_t state)
 {
   return _gpgrt_b64dec_finish (state);
@@ -1132,6 +1132,18 @@ gpgrt_close_all_fds (int from, int *keep_fds)
   _gpgrt_close_all_fds (from, keep_fds);
 }
 #endif /*0*/
+
+gpg_err_code_t
+gpgrt_spawn_actions_new (gpgrt_spawn_actions_t *r_act)
+{
+  return _gpgrt_spawn_actions_new (r_act);
+}
+
+void
+gpgrt_spawn_actions_release (gpgrt_spawn_actions_t act)
+{
+  _gpgrt_spawn_actions_release (act);
+}
 
 #ifdef HAVE_W32_SYSTEM
 void

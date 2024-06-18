@@ -586,7 +586,7 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv[],
         }
 
       /* In detached case, it must be no R_PROCESS.  */
-      if (r_process)
+      if (r_process || pgmname == NULL)
         {
           xfree (cmdline);
           return GPG_ERR_INV_ARG;
@@ -597,6 +597,12 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv[],
 
   if (r_process)
     *r_process = NULL;
+
+  if (pgmname == NULL)
+    {
+      xfree (cmdline);
+      return GPG_ERR_INV_ARG;
+    }
 
   process = xtrymalloc (sizeof (struct gpgrt_process));
   if (process == NULL)
@@ -785,6 +791,7 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv[],
 
   /* log_debug ("CreateProcess, path='%s' cmdline='%s'\n", pgmname, cmdline); */
   cr_flags = (CREATE_DEFAULT_ERROR_MODE
+              | ((flags & GPGRT_PROCESS_NO_CONSOLE) ? DETACHED_PROCESS : 0)
               | GetPriorityClass (GetCurrentProcess ())
               | CREATE_SUSPENDED);
   if (!(wpgmname = _gpgrt_utf8_to_wchar (pgmname)))
@@ -1088,7 +1095,7 @@ _gpgrt_process_wait (gpgrt_process_t process, int hang)
       break;
 
     case WAIT_FAILED:
-      _gpgrt_log_info (_("waiting for process to terminate failed: ec=%d\n"),
+      _gpgrt_log_info (_("waiting for process failed: ec=%d\n"),
                        (int)GetLastError ());
       ec = GPG_ERR_GENERAL;
       break;
