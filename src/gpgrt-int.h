@@ -737,7 +737,8 @@ void _gpgrt_process_release (gpgrt_process_t process);
 
 
 /* Close all file resources (descriptors), except KEEP_FDS.  */
-void _gpgrt_close_all_fds (int from, const int *keep_fds);
+void _gpgrt_close_all_fds (int from, const int *keep_fds,
+                           int fallback_max_fds);
 
 
 /*
@@ -760,9 +761,53 @@ void _gpgrt_set_confdir (int what, const char *name);
 int _gpgrt_cmp_version (const char *a, const char *b, int level);
 
 
+/*
+ * strlist.c
+ */
+void _gpgrt_strlist_free (gpgrt_strlist_t sl);
+gpgrt_strlist_t _gpgrt_strlist_add (gpgrt_strlist_t *list,
+                                    const char *string, unsigned int flags);
+gpgrt_strlist_t _gpgrt_strlist_tokenize (gpgrt_strlist_t *list,
+                                         const char *string, const char *delim,
+                                         unsigned int flags);
+gpgrt_strlist_t _gpgrt_strlist_copy (gpgrt_strlist_t list);
+gpgrt_strlist_t _gpgrt_strlist_rev (gpgrt_strlist_t *list);
+gpgrt_strlist_t _gpgrt_strlist_prev (gpgrt_strlist_t head,
+                                     gpgrt_strlist_t node);
+gpgrt_strlist_t _gpgrt_strlist_last (gpgrt_strlist_t node);
+char *_gpgrt_strlist_pop (gpgrt_strlist_t *list);
+gpgrt_strlist_t _gpgrt_strlist_find (gpgrt_strlist_t haystack,
+                                     const char *needle);
+
+/*
+ * name-value.c
+ */
+gpgrt_nvc_t _gpgrt_nvc_new (unsigned int flags);
+void _gpgrt_nvc_release (gpgrt_nvc_t cont);
+int _gpgrt_nvc_get_flag (gpgrt_nvc_t cont, unsigned int flags, int clear);
+gpg_err_code_t _gpgrt_nvc_add (gpgrt_nvc_t cont,
+                               const char *name, const char *value);
+gpg_err_code_t _gpgrt_nvc_set (gpgrt_nvc_t cont,
+                               const char *name, const char *value);
+gpg_err_code_t _gpgrt_nve_set (gpgrt_nvc_t cont, gpgrt_nve_t e,
+                               const char *value);
+void _gpgrt_nvc_delete (gpgrt_nvc_t cont, gpgrt_nve_t entry, const char *name);
+gpgrt_nve_t _gpgrt_nvc_lookup (gpgrt_nvc_t cont, const char *name);
+gpg_err_code_t _gpgrt_nvc_parse (gpgrt_nvc_t *result, int *errlinep,
+                                 estream_t stream, unsigned int flags);
+gpg_err_code_t _gpgrt_nvc_write (gpgrt_nvc_t cont, estream_t stream);
+gpgrt_nve_t _gpgrt_nve_next (gpgrt_nve_t entry, const char *name);
+const char *_gpgrt_nve_name (gpgrt_nve_t entry);
+const char *_gpgrt_nve_value (gpgrt_nve_t entry);
+/* Convenience functions.  */
+const char *_gpgrt_nvc_get_string (gpgrt_nvc_t nvc, const char *name);
+int _gpgrt_nvc_get_bool (gpgrt_nvc_t nvc, const char *name);
+
+
+
 
 /*
- * Internal platform abstraction functions (sysutils.c)
+ * Internal platform abstraction functions (sysutils.c and stringutil.c)
  */
 
 /* Return true if FD is valid.  */
@@ -802,6 +847,9 @@ char *_gpgrt_fnameconcat (const char *first_part,
 char *_gpgrt_absfnameconcat (const char *first_part,
                              ... ) GPGRT_ATTR_SENTINEL(0);
 
+/* What the name says.  */
+char *_gpgrt_trim_spaces (char *str);
+
 
 /*
  * Platform specific functions (Windows)
@@ -815,6 +863,12 @@ char *_gpgrt_w32_reg_get_string (const char *key);
 
 wchar_t *_gpgrt_fname_to_wchar (const char *fname);
 
+enum gpgrt_windows_feature
+  {
+    GPGRT_WINDOWS_PROC_ATTRIBUTE,
+    GPGRT_WINDOWS_UNDER_WINE
+  };
+int _gpgrt_windows_feature (int);
 
 #endif /*HAVE_W32_SYSTEM*/
 

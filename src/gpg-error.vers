@@ -223,6 +223,33 @@ GPG_ERROR_1.0 {
     gpgrt_spawn_actions_set_atfork;
     gpgrt_spawn_actions_set_env_rev;
 
+    gpgrt_strlist_free;
+    gpgrt_strlist_add;
+    gpgrt_strlist_tokenize;
+    gpgrt_strlist_copy;
+    gpgrt_strlist_rev;
+    gpgrt_strlist_prev;
+    gpgrt_strlist_last;
+    gpgrt_strlist_pop;
+    gpgrt_strlist_find;
+
+    gpgrt_nvc_new;
+    gpgrt_nvc_release;
+    gpgrt_nvc_get_flag;
+    gpgrt_nvc_add;
+    gpgrt_nvc_set;
+    gpgrt_nve_set;
+    gpgrt_nvc_delete;
+    gpgrt_nvc_lookup;
+    gpgrt_nvc_parse;
+    gpgrt_nvc_write;
+    gpgrt_nve_next;
+    gpgrt_nve_name;
+    gpgrt_nve_value;
+    gpgrt_nvc_get_string;
+    gpgrt_nvc_get_bool;
+
+
   local:
     *;
 };

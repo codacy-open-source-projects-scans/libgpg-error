@@ -29,7 +29,7 @@ min_automake_version="1.14"
 # See below for the LT versions.
 m4_define([mym4_package],[libgpg-error])
 m4_define([mym4_major], [1])
-m4_define([mym4_minor], [52])
+m4_define([mym4_minor], [57])
 
 # Below is m4 magic to extract and compute the revision number, the
 # decimalized short revision number, a beta version string, and a flag
@@ -51,8 +51,8 @@ AC_INIT([mym4_package],[mym4_version],[https://bugs.gnupg.org])
 #   (Interfaces added:			AGE++)
 #   (Interfaces removed:		AGE=0)
 # Note that added error codes don't constitute an interface change.
-LIBGPG_ERROR_LT_CURRENT=38
-LIBGPG_ERROR_LT_AGE=38
+LIBGPG_ERROR_LT_CURRENT=40
+LIBGPG_ERROR_LT_AGE=40
 LIBGPG_ERROR_LT_REVISION=0
 ################################################
 
@@ -142,6 +142,17 @@ case "${host}" in
        ;;
 esac
 
+# Set some variables for building build platform helpers.
+case "$build_os" in
+    *zOS*)
+        EXTRA_LIBS_FOR_BUILD=zoslib
+        ;;
+    *)
+        EXTRA_LIBS_FOR_BUILD=
+	;;
+esac
+AC_SUBST(EXTRA_LIBS_FOR_BUILD)
+
 
 if test "$have_w32_system" != yes; then
   gl_THREADLIB_EARLY
@@ -210,12 +221,15 @@ AH_BOTTOM([
 #define _ESTREAM_PRINTF_REALLOC _gpgrt_realloc
 #define _ESTREAM_PRINTF_EXTRA_INCLUDE "gpgrt-int.h"
 
-/* For building we need to define these macro.  */
+/* For building we need to define these macro. Note that they
+ * are undef-ed in tests/t-version.c so that we don't accidently
+ * use them in the public API.   */
 #define GPG_ERR_ENABLE_GETTEXT_MACROS 1
-#define GPG_ERR_ENABLE_ERRNO_MACROS 1
 #define GPGRT_ENABLE_ES_MACROS 1
 #define GPGRT_ENABLE_LOG_MACROS 1
 #define GPGRT_ENABLE_ARGPARSE_MACROS 1
+
+#define GPGRT_STD_COPYRIGHT_LINE "Copyright (C) 2025 g10 Code GmbH"
 ])
 
 # We used to provide gpg-error-config command always.  Now, it's
@@ -260,7 +274,8 @@ AC_SUBST(INSTALLSHELLPATH)
 # AC_FUNC_FORK
 
 AC_CHECK_FUNCS([flockfile vasprintf mmap rand strlwr stpcpy setenv stat \
-                getrlimit getpwnam getpwuid getpwnam_r getpwuid_r inet_pton])
+                getrlimit getpwnam getpwuid getpwnam_r getpwuid_r inet_pton \
+                getdents64 closefrom])
 
 
 #
@@ -572,7 +587,7 @@ GPG_ERROR_CONFIG_HOST="$host"
 case "$includedir" in
   /usr/include|/include) ;;
   '${prefix}/include')
-    if test "$prefix" != / -a "$prefix" != /usr; then
+    if test "$prefix" != / && test "$prefix" != /usr; then
       if test -z "$GPG_ERROR_CONFIG_CFLAGS"; then
         GPG_ERROR_CONFIG_CFLAGS="-I\${includedir}"
       else
@@ -592,10 +607,10 @@ case "$libdir" in
   /usr/lib|/usr/lib64|/lib|/lib64) ;;
   '${exec_prefix}/lib'|'${exec_prefix}/lib64')
     if test "$exec_prefix" = "NONE"; then
-      if test "$prefix" != / -a "$prefix" != /usr; then
+      if test "$prefix" != / && test "$prefix" != /usr; then
         GPG_ERROR_CONFIG_LIBS="-L\${libdir} $GPG_ERROR_CONFIG_LIBS"
       fi
-    elif test "$exec_prefix" != / -a "$exec_prefix" != /usr; then
+    elif test "$exec_prefix" != / && test "$exec_prefix" != /usr; then
       GPG_ERROR_CONFIG_LIBS="-L\${libdir} $GPG_ERROR_CONFIG_LIBS"
     fi
     ;;

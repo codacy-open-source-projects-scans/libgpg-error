@@ -1345,6 +1345,157 @@ gpgrt_absfnameconcat (const char *first, ... )
 
 
 
+void
+gpgrt_strlist_free (gpgrt_strlist_t sl)
+{
+  _gpgrt_strlist_free (sl);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_add (gpgrt_strlist_t *list, const char *string,
+                   unsigned int flags)
+{
+  return _gpgrt_strlist_add (list, string, flags);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_tokenize (gpgrt_strlist_t *list, const char *string,
+                        const char *delim, unsigned int flags)
+{
+  return _gpgrt_strlist_tokenize (list, string, delim, flags);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_copy (gpgrt_strlist_t list)
+{
+  return _gpgrt_strlist_copy (list);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_rev (gpgrt_strlist_t *list)
+{
+  return  _gpgrt_strlist_rev (list);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_prev (gpgrt_strlist_t head, gpgrt_strlist_t node)
+{
+  return _gpgrt_strlist_prev (head, node);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_last (gpgrt_strlist_t node)
+{
+  return _gpgrt_strlist_last (node);
+}
+
+char *
+gpgrt_strlist_pop (gpgrt_strlist_t *list)
+{
+  return _gpgrt_strlist_pop (list);
+}
+
+gpgrt_strlist_t
+gpgrt_strlist_find (gpgrt_strlist_t haystack, const char *needle)
+{
+  return _gpgrt_strlist_find (haystack, needle);
+}
+
+
+
+gpgrt_nvc_t
+gpgrt_nvc_new (unsigned int flags)
+{
+  return _gpgrt_nvc_new (flags);
+}
+
+void
+gpgrt_nvc_release (gpgrt_nvc_t cont)
+{
+  _gpgrt_nvc_release (cont);
+}
+
+int
+gpgrt_nvc_get_flag (gpgrt_nvc_t cont, unsigned int flags, int clear)
+{
+  return _gpgrt_nvc_get_flag (cont, flags, clear);
+}
+
+gpg_err_code_t
+gpgrt_nvc_add (gpgrt_nvc_t cont, const char *name, const char *value)
+{
+  return _gpgrt_nvc_add (cont, name, value);
+}
+
+gpg_err_code_t
+gpgrt_nvc_set (gpgrt_nvc_t cont, const char *name, const char *value)
+{
+  return _gpgrt_nvc_set (cont, name, value);
+}
+
+gpg_err_code_t
+gpgrt_nve_set (gpgrt_nvc_t cont, gpgrt_nve_t e, const char *value)
+{
+  return _gpgrt_nve_set (cont, e, value);
+}
+
+void
+gpgrt_nvc_delete (gpgrt_nvc_t cont, gpgrt_nve_t entry, const char *name)
+{
+  _gpgrt_nvc_delete (cont, entry, name);
+}
+
+gpgrt_nve_t
+gpgrt_nvc_lookup (gpgrt_nvc_t cont, const char *name)
+{
+  return _gpgrt_nvc_lookup (cont, name);
+}
+
+gpg_err_code_t
+gpgrt_nvc_parse (gpgrt_nvc_t *result, int *errlinep,
+                 estream_t stream, unsigned int flags)
+{
+  return _gpgrt_nvc_parse (result, errlinep, stream, flags);
+}
+
+gpg_err_code_t
+gpgrt_nvc_write (gpgrt_nvc_t cont, estream_t stream)
+{
+  return _gpgrt_nvc_write (cont, stream);
+}
+
+gpgrt_nve_t
+gpgrt_nve_next (gpgrt_nve_t entry, const char *name)
+{
+  return _gpgrt_nve_next (entry, name);
+}
+
+const char *
+gpgrt_nve_name (gpgrt_nve_t entry)
+{
+  return _gpgrt_nve_name (entry);
+}
+
+const char *
+gpgrt_nve_value (gpgrt_nve_t entry)
+{
+  return _gpgrt_nve_value (entry);
+}
+
+const char *
+gpgrt_nvc_get_string (gpgrt_nvc_t nvc, const char *name)
+{
+  return _gpgrt_nvc_get_string (nvc, name);
+}
+
+int
+gpgrt_nvc_get_bool (gpgrt_nvc_t nvc, const char *name)
+{
+  return _gpgrt_nvc_get_bool (nvc, name);
+}
+
+
+
 /* For consistency reasons we use function wrappers also for Windows
  * specific function despite that they are technically not needed.  */
 #ifdef HAVE_W32_SYSTEM
@@ -1378,6 +1529,12 @@ char *
 gpgrt_w32_reg_query_string (const char *root, const char *dir, const char *name)
 {
   return _gpgrt_w32_reg_query_string (root, dir, name);
+}
+
+char *
+gpgrt_w32_reg_get_string (const char *key)
+{
+  return _gpgrt_w32_reg_get_string (key);
 }
 
 #endif /*HAVE_W32_SYSTEM*/

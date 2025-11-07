@@ -19,12 +19,13 @@
 
 ## Process this file with automake to produce Makefile.in
 
-EXTRA_DIST = t-argparse.conf etc/t-argparse.conf
+EXTRA_DIST = t-argparse.conf etc/t-argparse.conf etc/Registry
 
 gpg_error_lib = ../src/libgpg-error.la
 
 TESTS = t-version t-strerror t-syserror t-lock t-printf t-poll t-b64 \
-	t-argparse t-logging t-stringutils t-malloc t-spawn
+	t-argparse t-logging t-stringutils t-malloc t-spawn t-strlist \
+	t-name-value
 
 if HAVE_LOCK_OPTIMIZATION
 TESTS += t-lock-single-posix

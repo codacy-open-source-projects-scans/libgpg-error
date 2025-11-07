@@ -1,5 +1,126 @@
-Noteworthy changes in version 1.52 (unreleased) [C38/A38/R_]
+Noteworthy changes in version 1.57 (unreleased) [C40/A40/R_]
 -----------------------------------------------
+
+
+ Release-info: https://dev.gnupg.org/T7847
+
+
+Noteworthy changes in version 1.56 (2025-10-07) [C40/A40/R0]
+-----------------------------------------------
+
+ * Support the %b conversion specifier in the estream printf
+   functions.  [rE6ac5332e4f]
+
+ * New spawn GPGRT_PROCESS_STDIO_NUL to be used on Windows to share
+   the "nul" device.  [T7723]
+
+ * Support pipe I/O for GPGRT_PROCESS_DETACHED on Windows.  [T7716]
+
+ * New mode keyword "share=xxx" for gpgrt_fopen.  [rE461cb5a8ea]
+
+ * Change the default method to get the number of fds to close.  This
+   fixes a spawning problem on certain POSIX machine.  [T7696]
+
+ * Fix some cases of inheriting HANDLEs on Windows.  [T7716]
+
+ * New system configurations for 64-bit Android, i686 Android, x86_64
+   Android and an armv7a alias to arm for Android.
+
+ * Set build specific build variable for zOS  [rE7ee191f54c]
+
+ * Interface changes relative to the 1.55 release:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ GPG_ERR_UNEXPECTED_PACKET           NEW.
+ GPGRT_PROCESS_STDIO_NUL             NEW.
+
+ Release-info: https://dev.gnupg.org/T7625
+
+
+Noteworthy changes in version 1.55 (2025-04-24) [C39/A39/R3]
+-----------------------------------------------
+
+ * Rewrite the extended length path handling under Windows.
+   [T5754,rEfba44d619d]
+
+ * Add new test commands to the gpg-error tool.  Allow command w/o
+   dashes and reformat the help.  [rEc002490a8f]
+
+ * Silence warning from gcc 15.  [T7621]
+
+ Release-info: https://dev.gnupg.org/T7614
+
+
+Noteworthy changes in version 1.54 (2025-04-17) [C39/A39/R2]
+-----------------------------------------------
+
+ * Fix a regression in 1.52 which did not allow to open UNC
+   specified files on Windows.  [rE28ae4ee194]
+
+ * Ignore log file specification from the Registry in the gpg-error
+   tool.
+
+ Release-info: https://dev.gnupg.org/T7597
+
+
+Noteworthy changes in version 1.53 (2025-04-09) [C39/A39/R1]
+-----------------------------------------------
+
+ * Fix regression in 1.52.  [rE32475a7868]
+
+
+Noteworthy changes in version 1.52 (2025-04-08) [C39/A39/R0]
+-----------------------------------------------
+
+ * The KEY_WOW64_xxKEY flags can now be passed to the Registry read
+   functions.  [rE652328c786]
+
+ * In the spawn functions care about closefrom/close call is
+   interrupted.  [T7478]
+
+ * New command --getreg for gpg-error on Windows.  [rE652328c786]
+
+ * New simple string list API.  [rE47097806f1]
+
+ * New API for name value files.  [rE7ec1f27b60]
+
+ * Add a Windows Registry emulation for Unix.  [rE9864dd4d66]
+
+ * Interface changes relative to the 1.51 release:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ gpgrt_w32_reg_query_string          NEW (Windows only).
+ gpgrt_strlist_t                     NEW type.
+ gpgrt_strlist_free                  NEW.
+ gpgrt_strlist_add                   NEW.
+ gpgrt_strlist_tokenize              NEW.
+ gpgrt_strlist_copy                  NEW.
+ gpgrt_strlist_rev                   NEW.
+ gpgrt_strlist_prev                  NEW.
+ gpgrt_strlist_last                  NEW.
+ gpgrt_strlist_pop                   NEW.
+ gpgrt_strlist_find                  NEW.
+ GPGRT_STRLIST_APPEND                NEW const.
+ GPGRT_STRLIST_WIPE                  NEW const.
+ gpgrt_nvc_t                         NEW type.
+ gpgrt_nve_t                         NEW type.
+ gpgrt_nvc_new                       NEW.
+ gpgrt_nvc_release                   NEW.
+ gpgrt_nvc_get_flag                  NEW.
+ gpgrt_nvc_add                       NEW.
+ gpgrt_nvc_set                       NEW.
+ gpgrt_nve_set                       NEW.
+ gpgrt_nvc_delete                    NEW.
+ gpgrt_nvc_lookup                    NEW.
+ gpgrt_nvc_parse                     NEW.
+ gpgrt_nvc_write                     NEW.
+ gpgrt_nve_next                      NEW.
+ gpgrt_nve_name                      NEW.
+ gpgrt_nve_value                     NEW.
+ gpgrt_nvc_get_string                NEW.
+ gpgrt_nvc_get_bool                  NEW.
+ GPGRT_NVC_WIPE                      NEW const.
+ GPGRT_NVC_PRIVKEY                   NEW const.
+ GPGRT_NVC_SECTION                   NEW const.
+ GPGRT_NVC_MODIFIED                  NEW const.
 
 
  Release-info: https://dev.gnupg.org/T7385

@@ -41,6 +41,11 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 
+#if !defined(HAVE_CLOSEFROM) && defined(HAVE_GETDENTS64)
+# include <sys/types.h>
+# include <dirent.h>
+#endif /* !defined(HAVE_CLOSEFROM) && defined(HAVE_GETDENTS64) */
+
 #ifdef HAVE_GETRLIMIT
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -50,13 +55,8 @@
 # include <sys/stat.h>
 #endif
 
-#if __linux__
-# include <sys/types.h>
-# include <dirent.h>
-#endif /*__linux__ */
-
+#define _GPGRT_NEED_AFLOCAL 1
 #include "gpgrt-int.h"
-
 
 /* Definition for the gpgrt_spawn_actions_t.  Note that there is a
  * different one for Windows.  */
@@ -84,17 +84,36 @@ struct gpgrt_process {
 };
 
 
+#ifdef HAVE_CLOSEFROM
+static void
+closefrom_really (int lowfd)
+{
+# if defined(__NetBSD__) || defined(__OpenBSD__)
+  /* On NetBSD and OpenBSD, it may be interrupted.  */
+  while (1)
+    if (closefrom (lowfd) == 0 || errno != EINTR)
+      break;
+# else
+  closefrom (lowfd);
+# endif
+}
+#else
+#define USE_GET_MAX_FDS 1
+#endif
 
+#ifdef USE_GET_MAX_FDS
 /* Return the maximum number of currently allowed open file
  * descriptors.  Only useful on POSIX systems but returns a value on
  * other systems too.  */
 static int
-get_max_fds (void)
+get_max_fds (int fallback_max_fds)
 {
   int max_fds = -1;
 #ifdef HAVE_GETRLIMIT
   struct rlimit rl;
-
+#endif
+#ifdef HAVE_GETDENTS64
+#define DIR_BUF_SIZE 1024
   /* Under Linux we can figure out the highest used file descriptor by
    * reading /proc/PID/fd.  This is in the common cases much fast than
    * for example doing 4096 close calls where almost all of them will
@@ -105,32 +124,54 @@ get_max_fds (void)
    * Another option would be to close the file descriptors as returned
    * from reading that directory - however then we need to snapshot
    * that list before starting to close them.  */
-#ifdef __linux__
   {
-    DIR *dir = NULL;
-    struct dirent *dir_entry;
+    int dir_fd;
+    struct dirent64 buf[(DIR_BUF_SIZE+sizeof (struct dirent64)-1)
+                        /sizeof (struct dirent64)];
+    char *dir_buf = (char *)buf; /* BUF aligned for struct dirent64 */
+    struct dirent64 *dir_entry;
+    ssize_t r, pos;
     const char *s;
     int x;
 
-    dir = opendir ("/proc/self/fd");
-    if (dir)
+    dir_fd = open ("/proc/self/fd", O_RDONLY | O_DIRECTORY);
+    if (dir_fd != -1)
       {
-        while ((dir_entry = readdir (dir)))
+        for (;;)
           {
-            s = dir_entry->d_name;
-            if ( *s < '0' || *s > '9')
-              continue;
-            x = atoi (s);
-            if (x > max_fds)
-              max_fds = x;
+            r = getdents64 (dir_fd, buf, sizeof (buf));
+            if (r == -1)
+              {
+                /* Fall back to other methods.  */
+                max_fds = -1;
+                break;
+              }
+            if (r == 0)
+              break;
+
+            for (pos = 0; pos < r; pos += dir_entry->d_reclen)
+              {
+                dir_entry = (struct dirent64 *)(dir_buf + pos);
+                s = dir_entry->d_name;
+                if (*s < '0' || *s > '9')
+                  continue;
+                /* NOTE: atoi is not guaranteed to be async-signal-safe.  */
+                for (x = 0; *s >= '0' && *s <= '9'; s++)
+                  x = x * 10 + (*s - '0');
+                if (!*s && x > max_fds && x != dir_fd)
+                  max_fds = x;
+              }
           }
-        closedir (dir);
+
+        close (dir_fd);
       }
+
     if (max_fds != -1)
       return max_fds + 1;
-    }
-#endif /* __linux__ */
+  }
+#endif /* HAVE_GETDENTS64 */
 
+#ifdef HAVE_GETRLIMIT
 
 # ifdef RLIMIT_NOFILE
   if (!getrlimit (RLIMIT_NOFILE, &rl))
@@ -140,23 +181,11 @@ get_max_fds (void)
 # ifdef RLIMIT_OFILE
   if (max_fds == -1 && !getrlimit (RLIMIT_OFILE, &rl))
     max_fds = rl.rlim_max;
-
 # endif
 #endif /*HAVE_GETRLIMIT*/
 
-#ifdef _SC_OPEN_MAX
-  if (max_fds == -1)
-    {
-      long int scres = sysconf (_SC_OPEN_MAX);
-      if (scres >= 0)
-        max_fds = scres;
-    }
-#endif
-
-#ifdef _POSIX_OPEN_MAX
-  if (max_fds == -1)
-    max_fds = _POSIX_OPEN_MAX;
-#endif
+  if (max_fds == -1 && fallback_max_fds >= 0)
+    max_fds = fallback_max_fds;
 
 #ifdef OPEN_MAX
   if (max_fds == -1)
@@ -164,55 +193,79 @@ get_max_fds (void)
 #endif
 
   if (max_fds == -1)
-    max_fds = 256;  /* Arbitrary limit.  */
+    max_fds = 1024;  /* Arbitrary limit.  */
 
   /* AIX returns INT32_MAX instead of a proper value.  We assume that
      this is always an error and use an arbitrary limit.  */
 #ifdef INT32_MAX
   if (max_fds == INT32_MAX)
-    max_fds = 256;
+    max_fds = 1024;
 #endif
 
   return max_fds;
 }
+#endif /* HAVE_CLOSEFROM */
 
+static void
+close_except (int first_fd, int max_fds, const int *except)
+{
+  int fd;
+  int except_start = 0;
+
+  for (fd = first_fd; fd < max_fds; fd++)
+    {
+      if (except)
+        {
+          int i;
+
+          for (i = except_start; except[i] != -1; i++)
+            if (except[i] == fd)
+              {
+                /* If we found the descriptor in the exception list
+                   we can start the next compare run at the next
+                   index because the exception list is ordered.  */
+                except_start = i + 1;
+                break;
+              }
+
+          if (except[i] != -1)
+            continue;
+        }
+
+      while (1)
+        if (close (fd) == 0 || errno != EINTR)
+          break;
+    }
+}
 
 /* Close all file descriptors starting with descriptor FIRST.  If
  * EXCEPT is not NULL, it is expected to be a list of file descriptors
  * which shall not be closed.  This list shall be sorted in ascending
  * order with the end marked by -1.  */
 void
-_gpgrt_close_all_fds (int first, const int *except)
+_gpgrt_close_all_fds (int first, const int *except, int fallback_max_fds)
 {
-  int max_fd = get_max_fds ();
-  int fd, i, except_start;
+  int max_fds;
 
+#ifdef HAVE_CLOSEFROM
+  (void)fallback_max_fds;
+  max_fds = first;
   if (except)
     {
-      except_start = 0;
-      for (fd=first; fd < max_fd; fd++)
-        {
-          for (i=except_start; except[i] != -1; i++)
-            {
-              if (except[i] == fd)
-                {
-                  /* If we found the descriptor in the exception list
-                     we can start the next compare run at the next
-                     index because the exception list is ordered.  */
-                except_start = i + 1;
-                break;
-                }
-            }
-          if (except[i] == -1)
-            close (fd);
-        }
-    }
-  else
-    {
-      for (fd=first; fd < max_fd; fd++)
-        close (fd);
+      int i;
+
+      /* Find the last entry in EXCEPT.  */
+      for (i = 0; except[i] != -1; i++)
+        ;
+      if (i != 0)
+        max_fds = except[--i] + 1;
     }
 
+  closefrom_really (max_fds);
+#else
+  max_fds = get_max_fds (fallback_max_fds);
+#endif
+  close_except (first, max_fds, except);
   _gpg_err_set_errno (0);
 }
 
@@ -342,7 +395,8 @@ prepare_environ (const char *const *envchange)
 }
 
 static int
-my_exec (const char *pgmname, const char *argv[], gpgrt_spawn_actions_t act)
+my_exec (const char *pgmname, const char *argv[], gpgrt_spawn_actions_t act,
+         int fallback_max_fds)
 {
   int i;
 
@@ -366,7 +420,7 @@ my_exec (const char *pgmname, const char *argv[], gpgrt_spawn_actions_t act)
       }
 
   /* Close all other files.  */
-  _gpgrt_close_all_fds (3, act->except_fds);
+  _gpgrt_close_all_fds (3, act->except_fds, fallback_max_fds);
 
   if (act->envchange && prepare_environ (act->envchange))
     goto leave;
@@ -392,7 +446,7 @@ my_exec (const char *pgmname, const char *argv[], gpgrt_spawn_actions_t act)
 
 static gpg_err_code_t
 spawn_detached (const char *pgmname, const char *argv[],
-                gpgrt_spawn_actions_t act)
+                gpgrt_spawn_actions_t act, int fallback_max_fds)
 {
   gpg_err_code_t ec;
   pid_t pid;
@@ -428,7 +482,7 @@ spawn_detached (const char *pgmname, const char *argv[],
       if (pid2)
         _exit (0);  /* Let the parent exit immediately. */
 
-      my_exec (pgmname, argv, act);
+      my_exec (pgmname, argv, act, fallback_max_fds);
       /*NOTREACHED*/
     }
 
@@ -529,6 +583,15 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
   const char **argv;
   int i, j;
   struct gpgrt_spawn_actions act_default;
+  int fallback_max_fds = -1;
+
+#if defined(USE_GET_MAX_FDS) && defined(_SC_OPEN_MAX)
+  {
+    long int scres = sysconf (_SC_OPEN_MAX);
+    if (scres >= 0)
+      fallback_max_fds = scres;
+  }
+#endif
 
   if (!act)
     {
@@ -584,7 +647,7 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
             }
         }
 
-      return spawn_detached (pgmname, argv, act);
+      return spawn_detached (pgmname, argv, act, fallback_max_fds);
     }
 
   process = xtrycalloc (1, sizeof (struct gpgrt_process));
@@ -728,7 +791,7 @@ _gpgrt_process_spawn (const char *pgmname, const char *argv1[],
         act->fd[2] = fd_err[1];
 
       /* Run child. */
-      if (!my_exec (pgmname, argv, act))
+      if (!my_exec (pgmname, argv, act, fallback_max_fds))
         {
           xfree (process);
           xfree (argv);
