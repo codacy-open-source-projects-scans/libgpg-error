@@ -29,7 +29,7 @@ min_automake_version="1.14"
 # See below for the LT versions.
 m4_define([mym4_package],[libgpg-error])
 m4_define([mym4_major], [1])
-m4_define([mym4_minor], [61])
+m4_define([mym4_minor], [62])
 
 # Below is m4 magic to extract and compute the revision number, the
 # decimalized short revision number, a beta version string, and a flag
@@ -53,7 +53,7 @@ AC_INIT([mym4_package],[mym4_version],[https://bugs.gnupg.org])
 # Note that added error codes don't constitute an interface change.
 LIBGPG_ERROR_LT_CURRENT=42
 LIBGPG_ERROR_LT_AGE=42
-LIBGPG_ERROR_LT_REVISION=0
+LIBGPG_ERROR_LT_REVISION=1
 ################################################
 
 AC_SUBST(LIBGPG_ERROR_LT_CURRENT)
@@ -261,9 +261,11 @@ AC_SUBST(INSTALLSHELLPATH)
 # the target system (POSIX or Windows).
 # AC_FUNC_FORK
 
+# Note that vasprintf is only used by the test suite; snprintf is used
+# by estream-printf.c only if available.
 AC_CHECK_FUNCS([flockfile vasprintf mmap rand strlwr stpcpy setenv stat \
                 getrlimit getpwnam getpwuid getpwnam_r getpwuid_r inet_pton \
-                getdents64 closefrom])
+                getdents64 closefrom snprintf])
 
 
 #
@@ -274,6 +276,7 @@ AC_C_CONST
 AC_CHECK_SIZEOF(int)
 AC_CHECK_SIZEOF(long)
 AC_CHECK_SIZEOF(long long)
+AC_TYPE_LONG_DOUBLE_WIDER
 
 GNUPG_FUNC_MKDIR_TAKES_ONE_ARG
 
@@ -633,16 +636,16 @@ if test x"$gl_use_threads" = xno; then
 elif test x$cross_compiling = xyes; then
   case $host in
     *-*-gnu* | *-*-linux-gnu* | *-*-linux-musl* | wasm*-*-emscripten)
-    AC_CHECK_TOOL(OBJDUMP, [objdump])
-    if test -n "$OBJDUMP"; then
+    AC_CHECK_TOOL(NM, [nm])
+    if test -n "$NM"; then
       lock_obj_h_generated=yes
       if test ! -d src; then mkdir src; fi
       LOCK_ABI_VERSION=1 host=$host host_alias=$host_alias \
-          CC=$CC OBJDUMP=$OBJDUMP \
+          CC=$CC NM=$NM \
           ac_ext=$ac_ext ac_objext=$ac_objext \
-          AWK=$AWK $srcdir/src/gen-lock-obj.sh \
+          $srcdir/src/gen-lock-obj.sh \
           >src/lock-obj-pub.native.h
-      AC_MSG_NOTICE([generated src/lock-obj-pub.native.h using $host_alias-objdump and $AWK])
+      AC_MSG_NOTICE([generated src/lock-obj-pub.native.h using $NM])
     else
       force_use_syscfg=yes
     fi

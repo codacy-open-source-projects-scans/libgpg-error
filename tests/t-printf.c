@@ -31,6 +31,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <locale.h>
+#include <float.h>
 
 #define PGM "t-printf"
 
@@ -418,7 +419,79 @@ check_snprintf (void)
                 (unsigned int)tmplen, rc, rc2,
                 (unsigned int)blen, (unsigned int)blen2);
     }
+
 }
+
+
+static void
+check_large_float (void)
+{
+  char *buf, *buf2;
+  double d = DBL_MAX;
+#ifdef HAVE_LONG_DOUBLE
+  long double ld;
+#endif
+
+  errno = ENOENT;
+  buf = gpgrt_bsprintf ("%.100f\n", d);
+  if (!buf)
+    {
+      fail ("format \"%%.100f\" with DBL_MAX failed: errno=%d (%s)\n",
+            errno, strerror (errno));
+    }
+  else if (verbose)
+    show ("format \"%%.100f\" with DBL_MAX: ->%s<-\n", buf);
+
+  buf2 = gpgrt_bsprintf ("%.101f\n", d);
+  if (!buf2)
+    {
+      fail ("format \"%%.101f\" with DBL_MAX failed: errno=%d (%s)\n",
+            errno, strerror (errno));
+    }
+  else if (verbose)
+    show ("format \"%%.101f\" with DBL_MAX: ->%s<-\n", buf2);
+
+  if (strcmp (buf, buf2))
+    fail ("format \"%%.100f\" does not match \"%%.101f\"\n" );
+  gpgrt_free (buf);
+  gpgrt_free (buf2);
+
+#ifdef HAVE_LONG_DOUBLE
+
+  ld = DBL_MAX;
+  buf = gpgrt_bsprintf ("%.100Lf\n", ld);
+  if (!buf)
+    {
+      fail ("format \"%%.100Lf\" with DBL_MAX failed: errno=%d (%s)\n",
+            errno, strerror (errno));
+    }
+  else if (verbose)
+    show ("format \"%%.100Lf\" with DBL_MAX: ->%s<-\n", buf);
+  gpgrt_free (buf);
+
+# if defined(_ARCH_PPC) && LDBL_MANT_DIG == 106
+  if (verbose)
+    show ("IBM double-double - skipping LDBL_MAX test\n");
+# elif defined(HAVE_LONG_DOUBLE_WIDER)
+  ld = LDBL_MAX;
+  buf = gpgrt_bsprintf ("%.100Lf\n", ld);
+  if (buf)
+    {
+      fail ("format \"%%.100Lf\" with LDBL_MAX unexpectedly did not fail\n");
+    }
+  else if (verbose)
+    show ("format \"%%.100Lf\" with LDBL_MAX failed as expected\n");
+  gpgrt_free (buf);
+# else
+  if (verbose)
+    show ("LDBL_MAX == DBL_MAX - skipping LDBL_MAX test\n");
+# endif
+
+#endif /*HAVE_LONG_DOUBLE*/
+}
+
+
+
 
 
 struct sfstate_s
@@ -584,6 +657,7 @@ main (int argc, char **argv)
 
   run_tests ();
   check_snprintf ();
+  check_large_float ();
   check_fprintf_sf ();
   check_fwrite ();
 
